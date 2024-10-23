@@ -1,27 +1,18 @@
-# PROVIDER
 terraform {
-
-  required_version = "~> 1.4"
-
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 4.55"
+      version = ">= 5.70"
     }
   }
-
   backend "s3" {
-    bucket         = "tf-vpc-peering-state-v1"
+    bucket         = "staticsitelbmulticloudtfhugogrillo"
     key            = "terraform.tfstate"
-    dynamodb_table = "tf-vpc-peering-state-v1"
+    dynamodb_table = "staticsitelbmulticloudtfhugogrillo"
     region         = "us-east-1"
   }
-
 }
 
 provider "aws" {
-  region                   = "us-east-1"
-  # shared_config_files      = ["~/.aws/config"]
-  # shared_credentials_files = ["~/.aws/credentials"]
-  # profile                  = "fiap"
+  region = "us-east-1"
 }
