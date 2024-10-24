@@ -1,323 +1,178 @@
-resource "azurerm_resource_group" "rg" {
-    name     = "rg-staticsite-lb-multicloud-tf-alveshugo"
-    location = "brazilsouth"
+resource "aws_vpc" "vpc" {
+    cidr_block           = "10.0.0.0/16"
+    enable_dns_hostnames = "true"
 }
 
-resource "azurerm_virtual_network" "vnet" {
-    name                = "vnet"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
-    address_space       = ["10.0.0.0/16"]
+resource "aws_internet_gateway" "igw" {
+    vpc_id = aws_vpc.vpc.id
 }
 
-resource "azurerm_subnet" "subnet1a" {
-    name                 = "subnet1a"
-    resource_group_name  = azurerm_resource_group.rg.name
-    virtual_network_name = azurerm_virtual_network.vnet.name
-    address_prefixes     = ["10.0.5.0/24"]
+resource "aws_subnet" "subnet1a" {
+    vpc_id                  = aws_vpc.vpc.id
+    cidr_block              = "10.0.5.0/24"
+    map_public_ip_on_launch = "true"
+    availability_zone       = "us-east-1a"
 }
 
-resource "azurerm_subnet" "subnet1c" {
-    name                 = "subnet1c"
-    resource_group_name  = azurerm_resource_group.rg.name
-    virtual_network_name = azurerm_virtual_network.vnet.name
-    address_prefixes     = ["10.0.6.0/24"]
+resource "aws_subnet" "subnet1c" {
+    vpc_id                  = aws_vpc.vpc.id
+    cidr_block              = "10.0.6.0/24"
+    map_public_ip_on_launch = "true"
+    availability_zone       = "us-east-1c"
 }
 
-resource "azurerm_network_security_group" "nsgvm" {
-    name                = "nsgvm"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
-    security_rule {
-        name                       = "HTTP"
-        priority                   = 1001
-        direction                  = "Inbound"
-        access                     = "Allow"
-        protocol                   = "Tcp"
-        source_port_range          = "*"
-        destination_port_range     = "80"
-        source_address_prefix      = "*"
-        destination_address_prefix = "*"
-    }
-    security_rule {
-        name                       = "FTP"
-        priority                   = 1011
-        direction                  = "Inbound"
-        access                     = "Allow"
-        protocol                   = "Tcp"
-        source_port_range          = "*"
-        destination_port_range     = "22"
-        source_address_prefix      = "*"
-        destination_address_prefix = "*"
+resource "aws_route_table" "route" {
+    vpc_id = aws_vpc.vpc.id
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = aws_internet_gateway.igw.id
     }
 }
 
-resource "azurerm_subnet_network_security_group_association" "nsgsubnet1a" {
-    subnet_id                 = azurerm_subnet.subnet1a.id
-    network_security_group_id = azurerm_network_security_group.nsgvm.id
+resource "aws_route_table_association" "route_association1a" {
+    subnet_id      = aws_subnet.subnet1a.id
+    route_table_id = aws_route_table.route.id
 }
 
-resource "azurerm_subnet_network_security_group_association" "nsgsubnet1c" {
-    subnet_id                 = azurerm_subnet.subnet1c.id
-    network_security_group_id = azurerm_network_security_group.nsgvm.id
+resource "aws_route_table_association" "route_association1c" {
+    subnet_id      = aws_subnet.subnet1c.id
+    route_table_id = aws_route_table.route.id
 }
 
-resource "azurerm_network_interface" "vm01" {
-    name                = "vm01"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
-    ip_configuration {
-        name                          = "vm01"
-        subnet_id                     = azurerm_subnet.subnet1a.id
-        private_ip_address_allocation = "Dynamic"
+resource "aws_security_group" "sglb" {
+    vpc_id = aws_vpc.vpc.id
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
     }
-}
-
-resource "azurerm_network_interface" "vm02" {
-    name                = "vm02"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
-    ip_configuration {
-        name                          = "vm02"
-        subnet_id                     = azurerm_subnet.subnet1a.id
-        private_ip_address_allocation = "Dynamic"
+    ingress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["10.0.0.0/16"]
     }
-}
-
-resource "azurerm_network_interface" "vm03" {
-    name                = "vm03"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
-    ip_configuration {
-        name                          = "vm03"
-        subnet_id                     = azurerm_subnet.subnet1c.id
-        private_ip_address_allocation = "Dynamic"
+    ingress {
+        description = "TCP/80 from All"
+        from_port   = 80
+        to_port     = 80
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
     }
 }
 
-resource "azurerm_network_interface" "vm04" {
-    name                = "vm04"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
-    ip_configuration {
-        name                          = "vm04"
-        subnet_id                     = azurerm_subnet.subnet1c.id
-        private_ip_address_allocation = "Dynamic"
+resource "aws_security_group" "sgec2" {
+    vpc_id = aws_vpc.vpc.id
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["10.0.0.0/16"]
+    }
+    ingress {
+        description = "TCP/80 from All"
+        from_port   = 80
+        to_port     = 80
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress {
+        description = "TCP/22 from All"
+        from_port   = 22
+        to_port     = 22
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
     }
 }
 
-resource "azurerm_availability_set" "asvm" {
-    name                = "asvm"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
+resource "aws_instance" "instance01" {
+    ami                    = "ami-0f409bae3775dc8e5"
+    instance_type          = "t2.micro"
+    subnet_id              = aws_subnet.subnet1a.id
+    vpc_security_group_ids = [aws_security_group.sgec2.id]
+    user_data              = <<EOF
+        #!/bin/bash
+        yum update -y
+        yum install -y httpd
+        echo "staticsite-lb-multi-cloud - AWS - instance01" > /var/www/html/index.html
+        service httpd restart
+    EOF
 }
 
-resource "azurerm_virtual_machine" "vm01" {
-    name                             = "vm01"
-    location                         = azurerm_resource_group.rg.location
-    resource_group_name              = azurerm_resource_group.rg.name
-    network_interface_ids            = [azurerm_network_interface.vm01.id]
-    availability_set_id              = azurerm_availability_set.asvm.id
-    vm_size                          = "Standard_DS1_v2"
-    delete_os_disk_on_termination    = true
-    delete_data_disks_on_termination = true
-    storage_image_reference {
-        publisher = "Canonical"
-        offer     = "0001-com-ubuntu-server-jammy"
-        sku       = "22_04-lts"
-        version   = "latest"
-    }
-    storage_os_disk {
-        name              = "vm01"
-        caching           = "ReadWrite"
-        create_option     = "FromImage"
-        managed_disk_type = "Standard_LRS"
-    }
-    os_profile {
-        computer_name  = "vm01"
-        admin_username = "vmuser"
-        admin_password = "Password1234!"
-        custom_data    = <<CUSTOM_DATA
-#!/bin/bash
-sudo apt update
-sudo apt install apache2 -y
-echo "staticsite-lb-multi-cloud - Azure - instance01" > /var/www/html/index.html
-CUSTOM_DATA
-    }
-    os_profile_linux_config {
-        disable_password_authentication = false
-    }
+resource "aws_instance" "instance02" {
+    ami                    = "ami-0f409bae3775dc8e5"
+    instance_type          = "t2.micro"
+    subnet_id              = aws_subnet.subnet1a.id
+    vpc_security_group_ids = [aws_security_group.sgec2.id]
+    user_data              = <<EOF
+        #!/bin/bash
+        yum update -y
+        yum install -y httpd
+        echo "staticsite-lb-multi-cloud - AWS - instance02" > /var/www/html/index.html
+        service httpd restart
+    EOF
 }
 
-resource "azurerm_virtual_machine" "vm02" {
-    name                             = "vm02"
-    location                         = azurerm_resource_group.rg.location
-    resource_group_name              = azurerm_resource_group.rg.name
-    network_interface_ids            = [azurerm_network_interface.vm02.id]
-    availability_set_id              = azurerm_availability_set.asvm.id
-    vm_size                          = "Standard_DS1_v2"
-    delete_os_disk_on_termination    = true
-    delete_data_disks_on_termination = true
-    storage_image_reference {
-        publisher = "Canonical"
-        offer     = "0001-com-ubuntu-server-jammy"
-        sku       = "22_04-lts"
-        version   = "latest"
-    }
-    storage_os_disk {
-        name              = "vm02"
-        caching           = "ReadWrite"
-        create_option     = "FromImage"
-        managed_disk_type = "Standard_LRS"
-    }
-    os_profile {
-        computer_name  = "vm02"
-        admin_username = "vmuser"
-        admin_password = "Password1234!"
-        custom_data    = <<CUSTOM_DATA
-#!/bin/bash
-sudo apt update
-sudo apt install apache2 -y
-echo "staticsite-lb-multi-cloud - Azure - instance02" > /var/www/html/index.html
-CUSTOM_DATA
-    }
-    os_profile_linux_config {
-        disable_password_authentication = false
-    }
+resource "aws_instance" "instance03" {
+    ami                    = "ami-0f409bae3775dc8e5"
+    instance_type          = "t2.micro"
+    subnet_id              = aws_subnet.subnet1c.id
+    vpc_security_group_ids = [aws_security_group.sgec2.id]
+    user_data              = <<EOF
+        #!/bin/bash
+        yum update -y
+        yum install -y httpd
+        echo "staticsite-lb-multi-cloud - AWS - instance03" > /var/www/html/index.html
+        service httpd restart
+    EOF
 }
 
-resource "azurerm_virtual_machine" "vm03" {
-    name                             = "vm03"
-    location                         = azurerm_resource_group.rg.location
-    resource_group_name              = azurerm_resource_group.rg.name
-    network_interface_ids            = [azurerm_network_interface.vm03.id]
-    availability_set_id              = azurerm_availability_set.asvm.id
-    vm_size                          = "Standard_DS1_v2"
-    delete_os_disk_on_termination    = true
-    delete_data_disks_on_termination = true
-    storage_image_reference {
-        publisher = "Canonical"
-        offer     = "0001-com-ubuntu-server-jammy"
-        sku       = "22_04-lts"
-        version   = "latest"
+resource "aws_instance" "instance04" {
+    ami                    = "ami-0f409bae3775dc8e5"
+    instance_type          = "t2.micro"
+    subnet_id              = aws_subnet.subnet1c.id
+    vpc_security_group_ids = [aws_security_group.sgec2.id]
+    user_data              = <<EOF
+        #!/bin/bash
+        yum update -y
+        yum install -y httpd
+        echo "staticsite-lb-multi-cloud - AWS - instance04" > /var/www/html/index.html
+        service httpd restart
+    EOF
+}
+
+resource "aws_elb" "elb" {
+    name            = "staticsitevmtfhugo"
+    security_groups = [aws_security_group.sglb.id]
+    subnets         = [aws_subnet.subnet1a.id, aws_subnet.subnet1c.id]
+    listener {
+        instance_port     = 80
+        instance_protocol = "http"
+        lb_port           = 80
+        lb_protocol       = "http"
     }
-    storage_os_disk {
-        name              = "vm03"
-        caching           = "ReadWrite"
-        create_option     = "FromImage"
-        managed_disk_type = "Standard_LRS"
+    health_check {
+        healthy_threshold   = 2
+        unhealthy_threshold = 2
+        timeout             = 3
+        target              = "HTTP:80/"
+        interval            = 30
     }
-    os_profile {
-        computer_name  = "vm03"
-        admin_username = "vmuser"
-        admin_password = "Password1234!"
-        custom_data    = <<CUSTOM_DATA
-#!/bin/bash
-sudo apt update
-sudo apt install apache2 -y
-echo "staticsite-lb-multi-cloud - Azure - instance03" > /var/www/html/index.html
-CUSTOM_DATA
-    }
-    os_profile_linux_config {
-        disable_password_authentication = false
-    }
+    instances = [
+        aws_instance.instance01.id, 
+        aws_instance.instance02.id,
+        aws_instance.instance03.id,
+        aws_instance.instance04.id
+    ]
 }
 
-resource "azurerm_virtual_machine" "vm04" {
-    name                             = "vm04"
-    location                         = azurerm_resource_group.rg.location
-    resource_group_name              = azurerm_resource_group.rg.name
-    network_interface_ids            = [azurerm_network_interface.vm04.id]
-    availability_set_id              = azurerm_availability_set.asvm.id
-    vm_size                          = "Standard_DS1_v2"
-    delete_os_disk_on_termination    = true
-    delete_data_disks_on_termination = true
-    storage_image_reference {
-        publisher = "Canonical"
-        offer     = "0001-com-ubuntu-server-jammy"
-        sku       = "22_04-lts"
-        version   = "latest"
-    }
-    storage_os_disk {
-        name              = "vm04"
-        caching           = "ReadWrite"
-        create_option     = "FromImage"
-        managed_disk_type = "Standard_LRS"
-    }
-    os_profile {
-        computer_name  = "vm04"
-        admin_username = "vmuser"
-        admin_password = "Password1234!"
-        custom_data    = <<CUSTOM_DATA
-#!/bin/bash
-sudo apt update
-sudo apt install apache2 -y
-echo "staticsite-lb-multi-cloud - Azure - instance04" > /var/www/html/index.html
-CUSTOM_DATA
-    }
-    os_profile_linux_config {
-        disable_password_authentication = false
-    }
-}
-
-resource "azurerm_public_ip" "lb" {
-    name                = "lb"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
-    allocation_method   = "Static"
-    domain_name_label   = "staticsitelbhugoalves"
-}
-
-resource "azurerm_lb" "lb" {
-    name                = "lb"
-    location            = azurerm_resource_group.rg.location
-    resource_group_name = azurerm_resource_group.rg.name
-    frontend_ip_configuration {
-        name                 = "lb"
-        public_ip_address_id = azurerm_public_ip.lb.id
-    }
-}
-
-resource "azurerm_lb_backend_address_pool" "lb" {
-    name            = "lb"
-    loadbalancer_id = azurerm_lb.lb.id
-}
-
-resource "azurerm_lb_rule" "lb" {
-    name                           = "HTTP"
-    loadbalancer_id                = azurerm_lb.lb.id
-    protocol                       = "Tcp"
-    frontend_port                  = 80
-    backend_port                   = 80
-    frontend_ip_configuration_name = "lb"
-    backend_address_pool_ids       = [azurerm_lb_backend_address_pool.lb.id]
-    load_distribution              = "SourceIPProtocol"
-}
-
-resource "azurerm_network_interface_backend_address_pool_association" "vm01" {
-    ip_configuration_name   = "vm01"
-    network_interface_id    = azurerm_network_interface.vm01.id
-    backend_address_pool_id = azurerm_lb_backend_address_pool.lb.id
-}
-
-resource "azurerm_network_interface_backend_address_pool_association" "vm02" {
-    ip_configuration_name   = "vm02"
-    network_interface_id    = azurerm_network_interface.vm02.id
-    backend_address_pool_id = azurerm_lb_backend_address_pool.lb.id
-}
-
-resource "azurerm_network_interface_backend_address_pool_association" "vm03" {
-    ip_configuration_name   = "vm03"
-    network_interface_id    = azurerm_network_interface.vm03.id
-    backend_address_pool_id = azurerm_lb_backend_address_pool.lb.id
-}
-
-resource "azurerm_network_interface_backend_address_pool_association" "vm04" {
-    ip_configuration_name   = "vm04"
-    network_interface_id    = azurerm_network_interface.vm04.id
-    backend_address_pool_id = azurerm_lb_backend_address_pool.lb.id
-}
-
-output "lb_fqdn" {
-    value = azurerm_public_ip.lb.fqdn
+output "elb_dns_name" {
+    value = aws_elb.elb.dns_name
 }
